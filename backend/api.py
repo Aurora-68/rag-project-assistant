@@ -1,43 +1,37 @@
 """
-api.py
-------
-API FastAPI exposant la recherche sémantique RAG via MongoDB Atlas Vector Search.
+api.py — fastapi backend for rag semantic search over mongodb atlas.
 
-Routes :
+routes:
   GET  /               → health check
-  POST /search         → recherche sémantique (body: {"query": "..."})
-  POST /upload_course  → ingestion dynamique d'un PDF (multipart/form-data)
+  POST /search         → semantic search (body: {"query": "..."})
+  POST /upload_course  → pdf ingestion (multipart/form-data)
 
-Lancement :
+usage:
   uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
 """
 
-import io
 import os
 import sys
 import uuid
 from pathlib import Path
 from typing import List, Optional
 
-fitz = None  # importé conditionnellement plus bas
+fitz = None
 try:
-    import fitz as _fitz  # PyMuPDF
+    import fitz as _fitz  # pymupdf
     fitz = _fitz
 except ImportError:
-    pass  # l'erreur sera levée à l'appel de /upload_course si fitz est absent
+    pass  # error raised at runtime if /upload_course is called without it
 
+import certifi
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pymongo import MongoClient  # pyrefly: ignore [missing-import]
+from sentence_transformers import SentenceTransformer  # pyrefly: ignore [missing-import]
 
-# pyrefly: ignore [missing-import]
-from pymongo import MongoClient
-
-# pyrefly: ignore [missing-import]
-from sentence_transformers import SentenceTransformer
-
-# ── Chargement de l'environnement ─────────────────────────────────────────────
+# load env vars from project root
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
@@ -49,45 +43,46 @@ EMBEDDING_FIELD = "embedding"
 MODEL_NAME      = "all-MiniLM-L6-v2"
 TOP_K           = 3
 
-# ── Paramètres du chunker (ingestion PDF) ────────────────────────────────────
-CHUNK_SIZE    = 500   # nombre de mots par chunk
-CHUNK_OVERLAP = 50   # chevauchement (en mots) entre deux chunks consécutifs
+# chunking params for pdf ingestion
+CHUNK_SIZE    = 500   # words per chunk
+CHUNK_OVERLAP = 50    # overlap between consecutive chunks
 
-# ── Vérification au démarrage ─────────────────────────────────────────────────
 if not MONGODB_URI:
-    sys.exit("[ERROR] MONGODB_URI introuvable dans .env -- serveur arrete.")
+    sys.exit("[error] MONGODB_URI not found in .env — server stopped.")
 
-# ── Initialisation du modèle et de MongoDB (une seule fois au démarrage) ──────
-print(f"[*] Chargement du modele '{MODEL_NAME}'...")
+# load embedding model once at startup
+print(f"[*] loading model '{MODEL_NAME}'...")
 embedding_model = SentenceTransformer(MODEL_NAME)
-print("[OK] Modele pret.")
+print("[ok] model ready.")
 
-print("[*] Connexion a MongoDB Atlas...")
-mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10_000)
+# connect to mongodb atlas
+print("[*] connecting to mongodb atlas...")
+mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10_000, tlsCAFile=certifi.where())
 collection   = mongo_client[DB_NAME][COLLECTION_NAME]
-print(f"[OK] Connecte a '{DB_NAME}.{COLLECTION_NAME}'.")
+print(f"[ok] connected to '{DB_NAME}.{COLLECTION_NAME}'.")
 
-# ── Application FastAPI ───────────────────────────────────────────────────────
+# fastapi app
 app = FastAPI(
     title="RAG University API",
-    description="API de recherche sémantique sur les cours NoSQL via MongoDB Atlas Vector Search.",
+    description="semantic search api for course materials via mongodb atlas vector search.",
     version="1.0.0",
 )
 
-# CORS — autorise le frontend local (React/Next.js sur localhost:3000 ou 5173)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],         # En production : remplace par l'URL exacte du frontend
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Schémas Pydantic ──────────────────────────────────────────────────────────
+
+# --- pydantic schemas ---
+
 class SearchRequest(BaseModel):
     query: str
-    top_k: Optional[int] = TOP_K        # nombre de résultats (défaut: 3)
-    source_file: Optional[str] = None   # filtrer par fichier source (optionnel)
+    top_k: Optional[int] = TOP_K
+    source_file: Optional[str] = None
 
 
 class ChunkResult(BaseModel):
@@ -111,46 +106,49 @@ class UploadResponse(BaseModel):
     message: str
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# --- routes ---
+
 @app.get("/", summary="Health Check")
 def root():
-    """Vérifie que l'API est opérationnelle."""
+    """basic health check endpoint."""
     return {
         "status": "ok",
-        "message": "RAG University API est en ligne 🚀",
+        "message": "rag university api is running",
         "docs": "/docs",
     }
 
 
-@app.post("/search", response_model=SearchResponse, summary="Recherche sémantique")
+@app.post("/search", response_model=SearchResponse, summary="Semantic Search")
 def search(request: SearchRequest):
     """
-    Reçoit une question (query) en texte libre, la vectorise avec
-    all-MiniLM-L6-v2, puis interroge MongoDB Atlas via $vectorSearch
-    pour retourner les chunks les plus pertinents.
+    takes a text query, encodes it with all-MiniLM-L6-v2, and runs
+    a $vectorSearch aggregation against mongodb atlas to return the
+    most relevant chunks.
     """
     if not request.query.strip():
-        raise HTTPException(status_code=400, detail="La query ne peut pas être vide.")
+        raise HTTPException(status_code=400, detail="query cannot be empty.")
 
-    limit = max(1, min(request.top_k, 10))  # borne entre 1 et 10
+    limit = max(1, min(request.top_k, 10))
 
-    # 1. Vectorisation de la question
+    # vectorize the query
     query_vector = embedding_model.encode(request.query).tolist()
 
-    # 2. Pipeline $vectorSearch (+ filtre source optionnel)
-    pipeline: list = [
+    # build $vectorSearch pipeline
+    # when filtering by source_file we cast a wider net since post-filtering
+    # reduces the result set
+    pipeline = [
         {
             "$vectorSearch": {
                 "index": VECTOR_INDEX,
                 "path": EMBEDDING_FIELD,
                 "queryVector": query_vector,
-                "numCandidates": limit * 20,  # plus de candidats pour compenser le filtre
-                "limit": limit * 4 if request.source_file else limit,
+                "numCandidates": 1000 if request.source_file else limit * 20,
+                "limit": 200 if request.source_file else limit,
             }
         },
     ]
 
-    # Filtre post-vectorSearch sur le fichier source si fourni
+    # optional post-filter on source file
     if request.source_file:
         pipeline.append({"$match": {"source_file": request.source_file}})
 
@@ -174,10 +172,9 @@ def search(request: SearchRequest):
     except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Erreur MongoDB lors de la recherche : {str(e)}"
+            detail=f"mongodb search error: {str(e)}"
         )
 
-    # 3. Formatage de la réponse
     results = [ChunkResult(**doc) for doc in raw_results]
 
     return SearchResponse(
@@ -187,16 +184,14 @@ def search(request: SearchRequest):
     )
 
 
-# ── Helpers internes ─────────────────────────────────────────────────────────
+# --- helpers ---
+
 def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """
-    Extrait le texte brut d'un PDF (bytes) page par page via PyMuPDF.
-    Retourne le texte complet concaténé.
-    """
+    """extract raw text from pdf bytes page by page using pymupdf."""
     if fitz is None:
         raise HTTPException(
             status_code=500,
-            detail="PyMuPDF (fitz) n'est pas installé. Exécute : pip install pymupdf",
+            detail="pymupdf (fitz) is not installed. run: pip install pymupdf",
         )
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
         pages_text = [page.get_text("text") for page in doc]
@@ -204,10 +199,7 @@ def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
 
 
 def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
-    """
-    Découpe un texte en chunks de `chunk_size` mots avec un chevauchement
-    de `overlap` mots entre deux chunks consécutifs.
-    """
+    """split text into word-level chunks with overlap."""
     words = text.split()
     chunks: List[str] = []
     start = 0
@@ -218,77 +210,63 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OV
             chunks.append(chunk)
         if end >= len(words):
             break
-        start = end - overlap  # recul pour le chevauchement
+        start = end - overlap
     return chunks
 
 
-# ── Nouvelle route : ingestion PDF ───────────────────────────────────────────
-@app.post("/upload_course", response_model=UploadResponse, summary="Ingestion d'un PDF")
+# --- pdf ingestion route ---
+
+@app.post("/upload_course", response_model=UploadResponse, summary="PDF Ingestion")
 async def upload_course(file: UploadFile = File(...)):
     """
-    Reçoit un fichier PDF, extrait son texte, le découpe en chunks,
-    vectorise chaque chunk avec all-MiniLM-L6-v2 (déjà chargé en mémoire)
-    et insère les documents dans la collection MongoDB course_chunks.
-
-    Structure de chaque document inséré :
-    {
-        chunk_id   : str   (UUID v4 unique)
-        text       : str   (contenu du chunk)
-        source_file: str   (nom du fichier PDF uploadé)
-        embedding  : list  (vecteur 384 dimensions)
-    }
+    accepts a pdf file, extracts text, chunks it, generates embeddings
+    with all-MiniLM-L6-v2, and inserts the documents into mongodb.
     """
-    # ── Validation du type de fichier ─────────────────────────────────────
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
             status_code=400,
-            detail="Seuls les fichiers PDF sont acceptés.",
+            detail="only pdf files are accepted.",
         )
 
-    # ── Lecture du fichier en mémoire ─────────────────────────────────────
     try:
         pdf_bytes = await file.read()
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Impossible de lire le fichier uploadé : {e}",
+            detail=f"failed to read uploaded file: {e}",
         )
 
-    # ── Extraction du texte ───────────────────────────────────────────────
     try:
         full_text = _extract_text_from_pdf(pdf_bytes)
     except HTTPException:
-        raise  # on remonte l'erreur déjà formatée
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=422,
-            detail=f"Erreur lors de l'extraction du texte PDF : {e}",
+            detail=f"pdf text extraction error: {e}",
         )
 
     if not full_text.strip():
         raise HTTPException(
             status_code=422,
-            detail="Le PDF ne contient pas de texte extractible (PDF scanné ?).",
+            detail="pdf contains no extractable text (scanned pdf?).",
         )
 
-    # ── Chunking ──────────────────────────────────────────────────────────
     chunks = _chunk_text(full_text)
     if not chunks:
         raise HTTPException(
             status_code=422,
-            detail="Aucun chunk généré depuis le PDF.",
+            detail="no chunks generated from pdf.",
         )
 
-    # ── Vectorisation (batch pour la performance) ─────────────────────────
     try:
         vectors = embedding_model.encode(chunks, show_progress_bar=False).tolist()
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la vectorisation : {e}",
+            detail=f"embedding generation error: {e}",
         )
 
-    # ── Construction des documents MongoDB ───────────────────────────────
     documents = [
         {
             "chunk_id":    str(uuid.uuid4()),
@@ -299,18 +277,17 @@ async def upload_course(file: UploadFile = File(...)):
         for chunk, vector in zip(chunks, vectors)
     ]
 
-    # ── Insertion en base ─────────────────────────────────────────────────
     try:
         result = collection.insert_many(documents, ordered=False)
     except Exception as e:
         raise HTTPException(
             status_code=503,
-            detail=f"Erreur MongoDB lors de l'insertion : {e}",
+            detail=f"mongodb insertion error: {e}",
         )
 
     inserted_count = len(result.inserted_ids)
     return UploadResponse(
         filename=file.filename,
         chunks_inserted=inserted_count,
-        message=f"{inserted_count} chunk(s) indexé(s) avec succès depuis '{file.filename}'.",
+        message=f"{inserted_count} chunk(s) indexed from '{file.filename}'.",
     )
