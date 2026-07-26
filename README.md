@@ -57,7 +57,6 @@ source venv/bin/activate            # macOS / Linux
 # venv\Scripts\activate             # Windows
 
 # Install PyTorch (CPU) then project dependencies
-pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
 # Add your MongoDB URI to the .env file, then start the server
