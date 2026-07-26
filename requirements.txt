@@ -1,31 +1,30 @@
-# ─────────────────────────────────────────────────────────────
-# RAG University Assistant — Python Dependencies (Minimal)
+# python dependencies for the backend
 #
-# Install:
+# setup:
 #   python -m venv venv
-#   venv\Scripts\activate             # Windows
-#   source venv/bin/activate          # macOS/Linux
+#   source venv/bin/activate          # macos/linux
+#   venv\Scripts\activate             # windows
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 #   pip install -r requirements.txt
-# ─────────────────────────────────────────────────────────────
+
 --extra-index-url https://download.pytorch.org/whl/cpu
 
-# ── Web framework ─────────────────────────────────────────────
+# web framework
 fastapi
 uvicorn
-python-multipart             # required for PDF upload (multipart/form-data)
+python-multipart
 
-# ── MongoDB ───────────────────────────────────────────────────
+# mongodb
 pymongo
-dnspython                    # required by pymongo for SRV connection strings
+dnspython
 
-# ── Embeddings (query vectorization for $vectorSearch) ────────
-sentence-transformers        # loads all-MiniLM-L6-v2 to encode queries → 384d vectors
-                             # NOTE: torch must be installed first (CPU-only recommended)
+# embeddings
+sentence-transformers
 
-# ── PDF text extraction ───────────────────────────────────────
-pymupdf                      # runtime extraction via fitz in /upload_course
-pypdf2                       # offline extraction script (extract_data.py)
+# pdf extraction
+pymupdf
+pypdf2
 
-# ── Environment ───────────────────────────────────────────────
-python-dotenv                # loads .env file (MONGODB_URI)
+# env
+python-dotenv
+certifi

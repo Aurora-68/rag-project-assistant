@@ -6,17 +6,15 @@
     "python.terminal.activateEnvironment": true,
     "python.terminal.activateEnvInCurrentTerminal": true,
 
-    // Désactiver Pyrefly (cause de faux positifs dans /__pyrefly_virtual__/inmemory)
+    // disable pyrefly (false positives)
     "pyrefly.enable": false,
 
-    // Utiliser Pylance (le linter officiel Microsoft) à la place
+    // use pylance instead
     "python.languageServer": "Pylance",
 
-    // Dire à Pylance d'utiliser le bon chemin pour trouver PyPDF2
     "python.analysis.venvPath": "${workspaceFolder}",
     "python.analysis.venvFolders": ["venv"],
 
-    // Exclure les fichiers virtuels internes des linters de l'analyse
     "files.exclude": {
         "**/__pyrefly_virtual__": true
     },
