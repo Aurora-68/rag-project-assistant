@@ -1,77 +1,31 @@
 # ─────────────────────────────────────────────────────────────
-# RAG University Assistant — Python Dependencies
-# Generated from: pip freeze (venv, 2026-07-24)
+# RAG University Assistant — Python Dependencies (Minimal)
 #
 # Install:
-#   python3 -m venv venv
-#   source venv/bin/activate        # macOS/Linux
-#   venv\Scripts\activate           # Windows
+#   python -m venv venv
+#   venv\Scripts\activate             # Windows
+#   source venv/bin/activate          # macOS/Linux
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
 #   pip install -r requirements.txt
 # ─────────────────────────────────────────────────────────────
+--extra-index-url https://download.pytorch.org/whl/cpu
 
 # ── Web framework ─────────────────────────────────────────────
-fastapi==0.128.8
-uvicorn==0.39.0
-starlette==0.49.3
-python-multipart==0.0.20      # required for multipart/form-data (PDF upload)
-
-# ── Data validation ───────────────────────────────────────────
-pydantic==2.13.4
-pydantic_core==2.46.4
-annotated-types==0.7.0
-typing_extensions==4.16.0
-typing-inspection==0.4.2
+fastapi
+uvicorn
+python-multipart             # required for PDF upload (multipart/form-data)
 
 # ── MongoDB ───────────────────────────────────────────────────
-pymongo==4.17.0
-dnspython==2.7.0              # required by pymongo for SRV connection strings
+pymongo
+dnspython                    # required by pymongo for SRV connection strings
 
-# ── Embeddings & ML ───────────────────────────────────────────
-sentence-transformers==5.1.2
-transformers==4.57.6
-torch==2.8.0
-tokenizers==0.22.2
-safetensors==0.7.0
-huggingface_hub==0.36.2
-scikit-learn==1.6.1
-scipy==1.13.1
-numpy==2.0.2
-joblib==1.5.3
-threadpoolctl==3.6.0
-pillow==11.3.0
+# ── Embeddings (query vectorization for $vectorSearch) ────────
+sentence-transformers        # loads all-MiniLM-L6-v2 to encode queries → 384d vectors
+                             # NOTE: torch must be installed first (CPU-only recommended)
 
-# ── PDF processing ────────────────────────────────────────────
-PyMuPDF==1.26.5               # runtime PDF extraction (upload route)
-PyPDF2==3.0.1                 # offline extraction scripts (extract_data.py)
+# ── PDF text extraction ───────────────────────────────────────
+pymupdf                      # runtime extraction via fitz in /upload_course
+pypdf2                       # offline extraction script (extract_data.py)
 
-# ── Environment & utilities ───────────────────────────────────
-python-dotenv==1.2.1
-requests==2.32.5
-tqdm==4.68.4
-regex==2026.1.15
-PyYAML==6.0.3
-packaging==26.2
-filelock==3.19.1
-fsspec==2025.10.0
-click==8.1.8
-
-# ── Async / HTTP ──────────────────────────────────────────────
-anyio==4.12.1
-h11==0.16.0
-httpx                         # recommended for async FastAPI testing
-idna==3.18
-urllib3==2.6.3
-certifi==2026.6.17
-charset-normalizer==3.4.9
-
-# ── Math / graph (torch deps) ─────────────────────────────────
-sympy==1.14.0
-mpmath==1.3.0
-networkx==3.2.1
-
-# ── Misc ──────────────────────────────────────────────────────
-annotated-doc==0.0.4
-exceptiongroup==1.3.1
-Jinja2==3.1.6
-MarkupSafe==3.0.3
-hf-xet==1.5.1
+# ── Environment ───────────────────────────────────────────────
+python-dotenv                # loads .env file (MONGODB_URI)

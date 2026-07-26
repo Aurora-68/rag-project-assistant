@@ -55,17 +55,17 @@ CHUNK_OVERLAP = 50   # chevauchement (en mots) entre deux chunks consécutifs
 
 # ── Vérification au démarrage ─────────────────────────────────────────────────
 if not MONGODB_URI:
-    sys.exit("❌ MONGODB_URI introuvable dans .env — serveur arrêté.")
+    sys.exit("[ERROR] MONGODB_URI introuvable dans .env -- serveur arrete.")
 
 # ── Initialisation du modèle et de MongoDB (une seule fois au démarrage) ──────
-print(f"🤖 Chargement du modèle '{MODEL_NAME}'...")
+print(f"[*] Chargement du modele '{MODEL_NAME}'...")
 embedding_model = SentenceTransformer(MODEL_NAME)
-print("✅ Modèle prêt.")
+print("[OK] Modele pret.")
 
-print("🔌 Connexion à MongoDB Atlas...")
+print("[*] Connexion a MongoDB Atlas...")
 mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10_000)
 collection   = mongo_client[DB_NAME][COLLECTION_NAME]
-print(f"✅ Connecté à '{DB_NAME}.{COLLECTION_NAME}'.")
+print(f"[OK] Connecte a '{DB_NAME}.{COLLECTION_NAME}'.")
 
 # ── Application FastAPI ───────────────────────────────────────────────────────
 app = FastAPI(
