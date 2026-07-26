@@ -1,93 +1,84 @@
-# rag-project-assistant
+# 🎓 RAG Project Assistant
 
-a retrieval-augmented generation (rag) chatbot for university course materials. students can upload course pdfs and ask questions — answers are pulled directly from the actual content using vector search, not hallucinated.
+A Retrieval-Augmented Generation (RAG) chatbot designed for university students. Upload your course PDFs, ask questions, and get accurate answers pulled directly from the actual content — no hallucinations.
 
-built as a semester project for the nosql & big data course at ibn tofail university, faculte des sciences — kenitra.
+Built as a semester project for the NoSQL & Big Data course at **Ibn Tofail University**, Faculté des Sciences — Kénitra.
 
-## how it works
+## ⚙️ How It Works
 
 ```
-user question → embedding (all-MiniLM-L6-v2) → mongodb atlas vector search
-    → top-k relevant chunks → llm prompt (openrouter) → streamed answer
+User Question → Embedding → MongoDB Atlas Vector Search → Top-K Chunks → LLM Prompt → Streamed Answer
 ```
 
-1. course pdfs are chunked and embedded into 384-dimensional vectors
-2. vectors are stored in mongodb atlas with a vector search index
-3. when a student asks a question, it gets embedded and matched against stored chunks
-4. the most relevant chunks are injected into the llm prompt as context
-5. the llm generates an answer strictly from those chunks (no hallucination)
+1. Course PDFs are chunked into overlapping segments and embedded into 384-dimensional vectors.
+2. Vectors are stored in MongoDB Atlas with a dedicated vector search index.
+3. When a student asks a question, it gets embedded and matched against stored chunks using cosine similarity.
+4. The most relevant chunks are injected into the LLM prompt as grounding context.
+5. The LLM generates an answer strictly from those chunks, citing its sources.
 
-## tech stack
+## 🧰 Tech Stack
 
-| layer | tech |
-|-------|------|
-| frontend | next.js, react |
-| backend api | fastapi, python |
-| database | mongodb atlas (vector search) |
-| embeddings | sentence-transformers (all-MiniLM-L6-v2) |
-| llm | openrouter api |
-| pdf parsing | pymupdf, pypdf2 |
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js, React |
+| Backend API | FastAPI, Python |
+| Database | MongoDB Atlas (Vector Search) |
+| Embeddings | Sentence-Transformers (`all-MiniLM-L6-v2`) |
+| LLM | OpenRouter API |
+| PDF Parsing | PyMuPDF, PyPDF2 |
 
-## project structure
+## 📁 Project Structure
 
 ```
 rag-project-assistant/
-├── backend/              # fastapi server + data pipeline scripts
-│   ├── api.py            # main api (search + pdf upload)
-│   ├── extract_data.py   # pdf → chunks
-│   ├── generate_embeddings.py  # chunks → vectors
-│   ├── upload_to_mongodb.py    # vectors → mongodb
-│   └── test_search.py   # standalone search test
-├── frontend/             # next.js chat interface
-│   ├── src/app/          # pages + api route
-│   ├── src/components/   # react components
-│   └── public/           # static assets
-├── data/                 # sample pdf + generated json files
-├── requirements.txt      # python dependencies
-└── .env                  # mongodb connection string
+├── backend/                        # FastAPI server + data pipeline scripts
+│   ├── api.py                      # Main API — /search and /upload_course
+│   ├── extract_data.py             # PDF → text chunks
+│   ├── generate_embeddings.py      # Chunks → 384d vectors
+│   ├── upload_to_mongodb.py        # Vectors → MongoDB Atlas
+│   └── test_search.py              # Standalone vector search test
+├── frontend/                       # Next.js chat interface
+│   ├── src/app/api/chat/route.js   # Server-side RAG orchestration
+│   ├── src/components/             # React UI components
+│   └── public/                     # Static assets (logos, avatars)
+├── data/                           # Sample PDF + pipeline output files
+├── requirements.txt                # Python dependencies
+└── .env                            # MongoDB connection string
 ```
 
-## setup
+## 🚀 Getting Started
 
-### backend
+### Backend
 
 ```bash
-# create virtual environment
+# Create and activate virtual environment
 python -m venv venv
-source venv/bin/activate        # macos/linux
-# venv\Scripts\activate         # windows
+source venv/bin/activate            # macOS / Linux
+# venv\Scripts\activate             # Windows
 
-# install pytorch (cpu only) then dependencies
+# Install PyTorch (CPU) then project dependencies
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 
-# configure mongodb connection
-# edit .env and add your MONGODB_URI
-
-# start the api server
+# Add your MongoDB URI to the .env file, then start the server
 python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000
 ```
 
-### frontend
+### Frontend
 
 ```bash
 cd frontend
-
-# install node dependencies
 npm install
 
-# configure environment
-# edit .env.local and add your OPENROUTER_API_KEY
-
-# start the dev server
+# Add your OpenRouter API key to .env.local, then start the dev server
 npm run dev
 ```
 
-open http://localhost:3000 in your browser.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-### initial data pipeline (optional)
+### 📂 Offline Data Pipeline (Optional)
 
-if you want to pre-index a pdf from the command line instead of using the upload button:
+If you'd like to pre-index a PDF from the command line instead of using the upload button:
 
 ```bash
 python -m backend.extract_data
@@ -95,16 +86,16 @@ python -m backend.generate_embeddings
 python -m backend.upload_to_mongodb
 ```
 
-## environment variables
+## 🔑 Environment Variables
 
-| file | variable | description |
+| File | Variable | Description |
 |------|----------|-------------|
-| `.env` | `MONGODB_URI` | mongodb atlas connection string |
-| `frontend/.env.local` | `OPENROUTER_API_KEY` | openrouter api key |
-| `frontend/.env.local` | `BACKEND_URL` | fastapi backend url (default: http://localhost:8000) |
-| `frontend/.env.local` | `NEXT_PUBLIC_BACKEND_URL` | same, but accessible from browser |
+| `.env` | `MONGODB_URI` | MongoDB Atlas connection string |
+| `frontend/.env.local` | `OPENROUTER_API_KEY` | OpenRouter API key |
+| `frontend/.env.local` | `BACKEND_URL` | FastAPI backend URL (default: `http://localhost:8000`) |
+| `frontend/.env.local` | `NEXT_PUBLIC_BACKEND_URL` | Client-side backend URL (same as above) |
 
-## authors
+## 👥 Authors
 
-- **mohammed nassiri** — frontend & llm integration
-- **yassine esserdaoui** — backend & data pipeline
+- **Mohammed Nassiri** — Frontend & LLM Integration
+- **Yassine Esserdaoui** — Backend & Data Pipeline
