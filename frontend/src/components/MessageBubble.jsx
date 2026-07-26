@@ -54,7 +54,7 @@ export default function MessageBubble({ message }) {
   const { role, content, sources, isStreaming, isError, fileName } = message;
   const isUser = role === "user";
   
-  // A helper class if we have a lot of markdown content so the pill radius can adapt
+  // loosen pill radius for multiline markdown content
   const hasMarkdown = !isUser && content && content.includes("\n");
 
   return (

@@ -1,8 +1,11 @@
 /**
- * /api/chat — Server-side RAG orchestration (Next.js API Route)
+ * /api/chat — server-side rag orchestration route.
  *
- * Single `npm run dev` — no separate Express server needed.
- * API key stays server-side, never reaches the browser.
+ * handles the full pipeline: receives a question from the frontend,
+ * fetches relevant chunks from the fastapi backend, builds the
+ * system prompt, and streams the llm response back via sse.
+ *
+ * the api key stays server-side and never reaches the browser.
  */
 
 import { OpenRouter } from "@openrouter/sdk";
@@ -12,7 +15,7 @@ const openrouter = new OpenRouter({
 });
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
-const MODEL = "google/gemma-4-26b-a4b-it:free";
+const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 function buildSystemPrompt(chunks) {
   const contextBlocks = chunks
@@ -43,13 +46,13 @@ export async function POST(request) {
     const { question, fileName } = await request.json();
 
     if (!question?.trim()) {
-      return new Response(JSON.stringify({ error: "Question is required." }), {
+      return new Response(JSON.stringify({ error: "question is required." }), {
         status: 400,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    // 1. Fetch context from Yassine's backend
+    // fetch relevant chunks from the fastapi backend
     let chunks = [];
     let sources = [];
 
@@ -75,22 +78,20 @@ export async function POST(request) {
         }));
       }
     } catch (err) {
-      console.warn(`⚠️  Backend unreachable: ${err.message}`);
+      console.warn(`backend unreachable: ${err.message}`);
     }
 
-    // 2. Build RAG prompt
+    // build the rag prompt and stream the response
     const systemPrompt = buildSystemPrompt(chunks);
     const messages = [
       { role: "system", content: systemPrompt },
       { role: "user", content: question.trim() },
     ];
 
-    // 3. Stream from OpenRouter
     const stream = await openrouter.chat.send({
       chatRequest: { model: MODEL, messages, stream: true },
     });
 
-    // 4. SSE response
     const encoder = new TextEncoder();
     const readableStream = new ReadableStream({
       async start(controller) {
@@ -107,11 +108,6 @@ export async function POST(request) {
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ type: "token", content })}\n\n`)
               );
-            }
-
-            // Usage information comes in the final chunk
-            if (chunk.usage) {
-              console.log("Reasoning tokens:", chunk.usage.completionTokensDetails?.reasoningTokens);
             }
           }
 
@@ -134,8 +130,8 @@ export async function POST(request) {
       },
     });
   } catch (error) {
-    console.error("❌ /api/chat error:", error);
-    return new Response(JSON.stringify({ error: error.message || "Internal server error" }), {
+    console.error("/api/chat error:", error);
+    return new Response(JSON.stringify({ error: error.message || "internal server error" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });

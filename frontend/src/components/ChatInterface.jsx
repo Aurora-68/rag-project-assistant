@@ -18,7 +18,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:800
 export default function ChatInterface() {
   const [messages, setMessages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
-  const [activeSource, setActiveSource] = useState(null); // nom du PDF actuellement indexé
+  const [activeSource, setActiveSource] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const messagesEndRef = useRef(null);
@@ -40,18 +40,17 @@ export default function ChatInterface() {
     async (question, file) => {
       if (!question.trim() || isStreaming || isUploading) return;
 
-      // ── 1. Upload du PDF si un fichier est attaché ────────────────────────
-      let currentSource = activeSource; // fichier déjà indexé de la session
+      let currentSource = activeSource;
 
+      // upload pdf to backend if a file is attached
       if (file && file.name.toLowerCase().endsWith(".pdf")) {
         setIsUploading(true);
-        // Message système d'information
         setMessages((prev) => [
           ...prev,
           {
             id: Date.now() - 2,
             role: "system",
-            content: `⏳ Indexation de **${file.name}** en cours…`,
+            content: `⏳ indexing **${file.name}**...`,
           },
         ]);
 
@@ -65,20 +64,20 @@ export default function ChatInterface() {
 
           if (!uploadRes.ok) {
             const err = await uploadRes.json().catch(() => ({}));
-            throw new Error(err.detail || `Upload error (${uploadRes.status})`);
+            throw new Error(err.detail || `upload error (${uploadRes.status})`);
           }
 
           const uploadData = await uploadRes.json();
           currentSource = file.name;
           setActiveSource(currentSource);
 
-          // Remplace le message d'attente par la confirmation
+          // replace the loading message with confirmation
           setMessages((prev) =>
             prev.map((m) =>
-              m.content?.includes("Indexation de") && m.role === "system"
+              m.content?.includes("indexing") && m.role === "system"
                 ? {
                     ...m,
-                    content: `✅ **${uploadData.chunks_inserted} chunks** indexés depuis *${file.name}*. Tu peux maintenant poser tes questions !`,
+                    content: `✅ **${uploadData.chunks_inserted} chunks** indexed from *${file.name}*. you can now ask questions!`,
                   }
                 : m
             )
@@ -86,23 +85,23 @@ export default function ChatInterface() {
         } catch (uploadError) {
           setMessages((prev) =>
             prev.map((m) =>
-              m.content?.includes("Indexation de") && m.role === "system"
+              m.content?.includes("indexing") && m.role === "system"
                 ? {
                     ...m,
-                    content: `❌ Erreur lors de l'upload : ${uploadError.message}`,
+                    content: `❌ upload error: ${uploadError.message}`,
                     isError: true,
                   }
                 : m
             )
           );
           setIsUploading(false);
-          return; // on n'envoie pas la question si l'upload a échoué
+          return;
         } finally {
           setIsUploading(false);
         }
       }
 
-      // ── 2. Envoi de la question au LLM ────────────────────────────────
+      // send the question to the llm
       const userMsg = {
         id: Date.now(),
         role: "user",
@@ -122,7 +121,6 @@ export default function ChatInterface() {
       setIsStreaming(true);
 
       try {
-        // On passe le fileName pour filtrer la recherche sur ce PDF
         const body = {
           question: question.trim(),
           fileName: currentSource || null,
@@ -136,7 +134,7 @@ export default function ChatInterface() {
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          throw new Error(err.error || `Server error (${response.status})`);
+          throw new Error(err.error || `server error (${response.status})`);
         }
 
         const reader = response.body.getReader();
@@ -196,7 +194,7 @@ export default function ChatInterface() {
                 );
               }
             } catch {
-              // skip malformed JSON
+              // skip malformed json
             }
           }
         }
@@ -212,7 +210,7 @@ export default function ChatInterface() {
             m.id === assistantMsg.id
               ? {
                   ...m,
-                  content: `Something went wrong: ${error.message}`,
+                  content: `something went wrong: ${error.message}`,
                   isStreaming: false,
                   isError: true,
                 }
@@ -228,7 +226,6 @@ export default function ChatInterface() {
 
   return (
     <div className={`app${sidebarOpen ? " sidebar-active" : ""}`}>
-      {/* ── Sidebar ───────────────────────────────────────────────────── */}
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -236,9 +233,7 @@ export default function ChatInterface() {
         messageCount={messages.length}
       />
 
-      {/* ── Main Content ──────────────────────────────────────────────── */}
       <div className="main-content">
-        {/* ── Top bar ─────────────────────────────────────────────────── */}
         <div className="topbar">
           <button
             className="sidebar-toggle"
@@ -254,14 +249,13 @@ export default function ChatInterface() {
           <span className="topbar-title">RAG Assistant Showcase</span>
         </div>
 
-        {/* ── Center: welcome / messages ──────────────────────────────── */}
         <div className={`center-area${hasMessages ? " has-messages" : ""}`}>
           {!hasMessages && (
             <div className="welcome-section">
               <img
                 className="welcome-logo"
                 src="/logo_faculte.png"
-                alt="Ibn Tofaïl University — Faculté des Sciences"
+                alt="Ibn Tofail University — Faculte des Sciences"
               />
               <h1 className="welcome-heading">RAG Assistant Showcase</h1>
               <p className="welcome-sub">
@@ -293,7 +287,6 @@ export default function ChatInterface() {
           )}
         </div>
 
-        {/* ── Chat bar ──────────────────────────────────────────────────── */}
         <div className={`chatbar-wrapper${hasMessages ? " bottom" : ""}`}>
           {activeSource && (
             <div className="active-source-badge">
